@@ -19,6 +19,10 @@ from core.data_loader import (
 from core.forecasting import MODEL_NAMES, forecast_model, evaluate_models
 from core.analytics import annual_summary, detect_records, regional_series
 from core.explainability import explain_random_forest
+from core.theme import (
+    BLUE, GREY, RED,
+    header, importance_fig, inject_theme, line_fig, plot, warming_stripes,
+)
 
 
 # ---------------------------------------------------------------------
@@ -180,7 +184,7 @@ def build_chart(
             y=observed["anomaly_c"],
             name="Observed temperature anomaly",
             mode="lines",
-            line={"color": "#2563eb"},
+            line={"color": BLUE},
         )
     )
     fig.add_trace(
@@ -189,7 +193,7 @@ def build_chart(
             y=forecast,
             name=f"{horizon}-month forecast",
             mode="lines",
-            line={"color": "#dc2626", "dash": "dash"},
+            line={"color": RED, "dash": "dash"},
         )
     )
     if np.isfinite(residual_mae):
@@ -212,7 +216,7 @@ def build_chart(
                 name="Approximate MAE band",
                 mode="lines",
                 fill="tonexty",
-                fillcolor="rgba(220,38,38,0.12)",
+                fillcolor="rgba(214,64,42,0.12)",
                 line={"width": 0},
             )
         )
@@ -247,7 +251,7 @@ def build_seasonality_chart(series: pd.Series) -> go.Figure:
             mode="lines",
             line={"width": 0},
             fill="tonexty",
-            fillcolor="rgba(37,99,235,0.12)",
+            fillcolor="rgba(31,95,166,0.12)",
             name="Historical range",
         )
     )
@@ -256,7 +260,7 @@ def build_seasonality_chart(series: pd.Series) -> go.Figure:
             x=labels,
             y=monthly["mean"],
             mode="lines+markers",
-            line={"color": "#2563eb", "width": 3},
+            line={"color": BLUE, "width": 3},
             marker={"size": 7},
             name="Monthly average",
         )
@@ -290,34 +294,11 @@ def build_forecast_table(forecast: pd.Series, latest: float) -> pd.DataFrame:
 # Styling and application header
 # ---------------------------------------------------------------------
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stMetric"] {
-        background: linear-gradient(
-            135deg, rgba(37,99,235,.12), rgba(15,23,42,.02)
-        );
-        border: 1px solid rgba(148,163,184,.25);
-        padding: 14px;
-        border-radius: 12px;
-    }
-    [data-testid="stMetricValue"] { font-size: 1.65rem; }
-    .section-label {
-        color: #64748b;
-        font-size: .82rem;
-        font-weight: 700;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.title("🌍 NASA Climate Outlook")
-st.caption(
-    "Global temperature monitoring, historical exploration, "
-    "experimental forecasting and regional climate analysis."
+inject_theme()
+header(
+    "NASA Climate Outlook",
+    "Global temperature monitoring, historical exploration, experimental "
+    "forecasting and regional climate analysis.",
 )
 
 
@@ -415,6 +396,8 @@ rise_frequency = rising_frequency(series)
 forecast_table = build_forecast_table(overview_forecast, latest)
 plot_observed = observed.iloc[-history_months:]
 
+warming_stripes(series)
+
 
 # ---------------------------------------------------------------------
 # Main navigation
@@ -439,11 +422,6 @@ tabs = st.tabs(tab_names)
 # ---------------------------------------------------------------------
 
 with tabs[0]:
-    st.markdown(
-        '<div class="section-label">Current conditions and outlook</div>',
-        unsafe_allow_html=True,
-    )
-
     metric_columns = st.columns(5)
     metric_columns[0].metric(
         "Latest observation",
@@ -462,9 +440,12 @@ with tabs[0]:
         "Annualized recent trend",
         f"{trend_slope:+.2f} °C/yr",
     )
-    metric_columns[4].metric("Direction", direction)
+    metric_columns[4].metric(
+        "Direction",
+        {"Rising": "▲ ", "Falling": "▼ ", "Stable": "● "}[direction] + direction,
+    )
 
-    st.plotly_chart(
+    plot(
         build_chart(plot_observed, overview_forecast, overview_mae, horizon),
         use_container_width=True,
     )
@@ -477,7 +458,7 @@ with tabs[0]:
     overview_left, overview_right = st.columns([1.35, 1])
     with overview_left:
         st.subheader("Seasonality by calendar month")
-        st.plotly_chart(
+        plot(
             build_seasonality_chart(series.iloc[-min(len(series), 360):]),
             use_container_width=True,
         )
@@ -540,10 +521,12 @@ with tabs[0]:
             "MAE (°C)": [seasonal_mae, baseline_mae],
         }
     )
-    st.bar_chart(
-        baseline_comparison.set_index("Model")["MAE (°C)"],
-        color="#2563eb",
+    mae_fig = px.bar(
+        baseline_comparison, x="MAE (°C)", y="Model", orientation="h",
+        text_auto=".3f", color="Model", color_discrete_sequence=[BLUE, GREY],
     )
+    mae_fig.update_layout(showlegend=False, yaxis_title=None)
+    plot(mae_fig, height=220)
 
     st.subheader("Recent observed values")
     st.dataframe(
@@ -613,7 +596,7 @@ with tabs[1]:
         title=f"{aggregation} temperature anomalies",
     )
     hist_fig.update_layout(hovermode="x unified")
-    st.plotly_chart(hist_fig, use_container_width=True)
+    plot(hist_fig, use_container_width=True)
 
     st.subheader("Annual summary")
     st.dataframe(annual_summary(historical), use_container_width=True)
@@ -700,7 +683,7 @@ with tabs[2]:
                     x=result["lower"].index,
                     y=result["lower"].values,
                     fill="tonexty",
-                    fillcolor="rgba(220,38,38,.15)",
+                    fillcolor="rgba(214,64,42,.15)",
                     line={"width": 0},
                     name="Approximate interval",
                 )
@@ -711,7 +694,7 @@ with tabs[2]:
                 xaxis_title="Date",
                 hovermode="x unified",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            plot(fig, use_container_width=True)
             st.caption(result["note"])
 
             forecast_details = pd.DataFrame(
@@ -800,7 +783,7 @@ with tabs[3]:
                 y="MAE (°C)",
                 title="Mean absolute error by model",
             )
-            st.plotly_chart(bar, use_container_width=True)
+            plot(bar, use_container_width=True)
 
         st.download_button(
             "Download leaderboard CSV",
@@ -854,7 +837,7 @@ with tabs[4]:
             f"**Currently displayed region:** "
             f"{st.session_state.get('regional_name', 'Unknown')}"
         )
-        st.line_chart(regional, y_label="Anomaly (°C)")
+        plot(line_fig(regional, "Anomaly (°C)"), height=380)
         st.caption(
             "Missing grid cells are excluded from the regional average."
         )
@@ -904,7 +887,7 @@ with tabs[5]:
                 ),
             )
             map_fig.update_traces(marker={"size": 4})
-            st.plotly_chart(map_fig, use_container_width=True)
+            plot(map_fig, use_container_width=True)
         else:
             st.error(
                 "The gridded dataset did not contain the expected "
@@ -945,10 +928,7 @@ with tabs[6]:
                 "The selected dataset differs from the dataset used for "
                 "this explanation. Generate it again."
             )
-        st.bar_chart(
-            shap_values,
-            y_label="Mean absolute SHAP value",
-        )
+        plot(importance_fig(shap_values, "Mean absolute SHAP value"))
 
 
 # ---------------------------------------------------------------------
